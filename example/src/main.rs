@@ -1,23 +1,16 @@
+use deppy::{Dep, ServiceCollectionBuilder, ServiceHandler, ServiceScope};
 use deppy_macros::Injectable;
-use deppy::{Injectable as InjectableTrait, ServiceCollectionBuilder, ServiceHandler, ServiceScope};
-use std::sync::Arc;
 
+#[derive(Injectable)]
 struct Funny {
+    #[injectable(default_value = "This is funny!")]
     msg: String,
 }
 
-impl InjectableTrait for Funny {
-    fn inject<T: ServiceHandler>(_: &T) -> Self {
-        Funny {
-            msg: String::from("This is funny!"),
-        }
-    }
-}
-
 #[derive(Injectable)]
-#[injectable_config(post_init = Self::post_init)]
+#[injectable(post_init = Self::post_init)]
 struct Funnier {
-    funny: Arc<Funny>,
+    funny: Dep<Funny>,
 }
 
 impl Funnier {
@@ -35,21 +28,21 @@ fn main() {
     builder.add_singleton::<Funny>().add_scoped::<Funnier>();
     let collection = builder.build();
 
-    let funnier: Arc<Funnier> = collection.get_required_service();
+    let funnier: Dep<Funnier> = collection.get_required_service();
     funnier.print_smth();
     
-    let funnier: Arc<Funnier> = collection.get_required_service();
+    let funnier: Dep<Funnier> = collection.get_required_service();
     funnier.print_smth();
 
     let scoped = ServiceScope::create(&collection);
-    let funnier: Arc<Funnier> = scoped.get_required_service();
+    let funnier: Dep<Funnier> = scoped.get_required_service();
     funnier.print_smth();
-    let funnier: Arc<Funnier> = scoped.get_required_service();
+    let funnier: Dep<Funnier> = scoped.get_required_service();
     funnier.print_smth();
 
     let scoped = ServiceScope::create(&collection);
-    let funnier: Arc<Funnier> = scoped.get_required_service();
+    let funnier: Dep<Funnier> = scoped.get_required_service();
     funnier.print_smth();
-    let funnier: Arc<Funnier> = scoped.get_required_service();
+    let funnier: Dep<Funnier> = scoped.get_required_service();
     funnier.print_smth();
 }

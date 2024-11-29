@@ -1,20 +1,22 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 pub trait ServiceHandler {
     fn get_service_by_type_id(&self, type_id: &TypeId) -> Option<Arc<dyn Any + Send + Sync>>;
 
-    fn get_service<T: Any + Send + Sync>(&self) -> Option<Arc<T>>
+    fn get_service<T: Any + Send + Sync>(&self) -> Option<Dep<T>>
     where
         Self: Sized,
     {
-        self.get_service_by_type_id(&TypeId::of::<T>())?
+        Some(Dep(self
+            .get_service_by_type_id(&TypeId::of::<T>())?
             .downcast::<T>()
-            .ok()
+            .ok()?))
     }
 
-    fn get_required_service<T: Any + Send + Sync>(&self) -> Arc<T>
+    fn get_required_service<T: Any + Send + Sync>(&self) -> Dep<T>
     where
         Self: Sized,
     {
@@ -31,6 +33,17 @@ pub enum ServiceType {
     Singleton,
     Scoped,
     Transient,
+}
+
+/// Used mainly by derive macro ``Injectable`` to identify what is considered a service and what is considered non-service
+pub struct Dep<T>(Arc<T>);
+
+impl<T> Deref for Dep<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 pub type InitializeFn<T> = fn(&T) -> Box<dyn Any + Send + Sync>;
