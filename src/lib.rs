@@ -4,7 +4,12 @@ use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 
 pub trait ServiceHandler {
+    type ScopeType: ServiceHandler;
     fn get_service_by_type_id(&self, type_id: &TypeId) -> Option<Arc<dyn Any + Send + Sync>>;
+
+    fn create_scope(&self) -> Self::ScopeType
+    where
+        Self::ScopeType: ServiceHandler;
 
     fn get_service<T: Any + Send + Sync>(&self) -> Option<Dep<T>>
     where
@@ -87,6 +92,8 @@ impl ServiceCollection {
 }
 
 impl ServiceHandler for ServiceCollection {
+    type ScopeType = ServiceScope;
+
     fn get_service_by_type_id(&self, type_id: &TypeId) -> Option<Arc<dyn Any + Send + Sync>> {
         let information = self.service_info.get(type_id);
 
@@ -98,6 +105,13 @@ impl ServiceHandler for ServiceCollection {
         } else {
             None
         }
+    }
+
+    fn create_scope(&self) -> Self::ScopeType
+    where
+        Self::ScopeType: ServiceHandler,
+    {
+        Self::ScopeType::create(self)
     }
 }
 
@@ -152,6 +166,8 @@ impl ServiceScope {
 }
 
 impl ServiceHandler for ServiceScope {
+    type ScopeType = Self;
+
     fn get_service_by_type_id(&self, type_id: &TypeId) -> Option<Arc<dyn Any + Send + Sync>> {
         let information = self.services.get(type_id);
 
@@ -160,6 +176,13 @@ impl ServiceHandler for ServiceScope {
         } else {
             None
         }
+    }
+
+    fn create_scope(&self) -> Self::ScopeType
+    where
+        Self::ScopeType: ServiceHandler
+    {
+        self.clone()
     }
 }
 
