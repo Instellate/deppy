@@ -33,6 +33,21 @@ pub trait Injectable {
     fn inject<T: ServiceHandler>(handler: &T) -> Self;
 }
 
+/// Trait for initializing structs not owned by you.
+/// Prefer `Injectable` when able to as it's less messy
+pub trait Initialize<R: Any + Send + Sync> {
+    fn initialize<T: ServiceHandler>(&self, handler: &T) -> R;
+}
+
+#[derive(Clone)]
+struct DefaultInitializer;
+
+impl<I: Injectable + Any + Send + Sync> Initialize<I> for DefaultInitializer {
+    fn initialize<T: ServiceHandler>(&self, handler: &T) -> I {
+        I::inject(handler)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ServiceType {
     Singleton,
@@ -51,21 +66,21 @@ impl<T> Deref for Dep<T> {
     }
 }
 
-pub type InitializeFn<T> = fn(&T) -> Box<dyn Any + Send + Sync>;
+pub type InitializeFn<T> = Arc<dyn Fn(&T) -> Box<dyn Any + Send + Sync>>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ServiceInformation {
     pub(crate) initialize_fn: InitializeFn<ServiceCollection>,
     pub(crate) type_: ServiceType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 struct ScopedServiceInformation {
     initialize_fn: InitializeFn<ServiceScope>,
     type_: ServiceType,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ServiceCollection {
     service_info: Arc<HashMap<TypeId, ServiceInformation>>,
     scoped_service_info: Arc<HashMap<TypeId, ScopedServiceInformation>>,
@@ -180,7 +195,7 @@ impl ServiceHandler for ServiceScope {
 
     fn create_scope(&self) -> Self::ScopeType
     where
-        Self::ScopeType: ServiceHandler
+        Self::ScopeType: ServiceHandler,
     {
         self.clone()
     }
@@ -196,19 +211,24 @@ impl From<ServiceCollection> for ServiceScope {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct ServiceCollectionBuilder {
     services: HashMap<TypeId, ServiceInformation>,
     scoped_services: HashMap<TypeId, ScopedServiceInformation>,
 }
 
 impl ServiceCollectionBuilder {
-    pub fn add_service<T: Injectable + Any + Send + Sync>(
-        &mut self,
+    pub fn add_service<T: Any + Send + Sync, I: Initialize<T> + Clone + 'static>(
+        mut self,
         type_: ServiceType,
-    ) -> &mut Self {
-        let collection_closure: InitializeFn<ServiceCollection> = |x| Box::new(T::inject(x));
-        let scoped_closure: InitializeFn<ServiceScope> = |x| Box::new(T::inject(x));
+        initializer: I,
+    ) -> Self
+    {
+        let closure_clone = initializer.clone();
+        let collection_closure: InitializeFn<ServiceCollection> =
+            Arc::new(move |x| Box::new(closure_clone.initialize(x) ));
+        let scoped_closure: InitializeFn<ServiceScope> =
+            Arc::new(move |x| Box::new(initializer.initialize(x)));
 
         let information = ServiceInformation {
             initialize_fn: collection_closure,
@@ -227,21 +247,23 @@ impl ServiceCollectionBuilder {
         self
     }
 
-    pub fn add_singleton<T: Injectable + Any + Send + Sync>(&mut self) -> &mut Self {
-        self.add_service::<T>(ServiceType::Singleton)
+    pub fn add_singleton<T: Injectable + Any + Send + Sync>(self) -> Self {
+        self.add_service::<T, DefaultInitializer>(ServiceType::Singleton, DefaultInitializer)
     }
 
-    pub fn add_scoped<T: Injectable + Any + Send + Sync>(&mut self) -> &mut Self {
-        self.add_service::<T>(ServiceType::Scoped)
+    pub fn add_scoped<T: Injectable + Any + Send + Sync>(self) -> Self {
+        self.add_service::<T, DefaultInitializer>(ServiceType::Scoped, DefaultInitializer)
     }
 
-    pub fn add_transient<T: Injectable + Any + Send + Sync>(&mut self) -> &mut Self {
-        self.add_service::<T>(ServiceType::Transient)
+    pub fn add_transient<T: Injectable + Any + Send + Sync>(self) -> Self {
+        self.add_service::<T, DefaultInitializer>(ServiceType::Transient, DefaultInitializer)
     }
 
     pub fn build(self) -> ServiceCollection {
         ServiceCollection {
+            #[allow(clippy::arc_with_non_send_sync)] // No idea why this is caused, everything looks thread safe for me :Clueless: - Instellate
             service_info: Arc::new(self.services),
+            #[allow(clippy::arc_with_non_send_sync)]
             scoped_service_info: Arc::new(self.scoped_services),
             singletons: Arc::new(Default::default()),
         }
