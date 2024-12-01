@@ -71,7 +71,7 @@ pub trait Initialize<R: Any + Send + Sync> {
 
 #[async_trait]
 pub trait InitializeAsync<'l, R: Any + Send + Sync> {
-    async fn initialize<T: ServiceHandlerAsync<'l> + ServiceHandler + Send + Sync>(&self, handler: &T) -> R;
+    async fn initialize<T: ServiceHandlerAsync<'l> + ServiceHandler>(&self, handler: &T) -> R;
 }
 
 #[derive(Clone)]
