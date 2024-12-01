@@ -70,8 +70,8 @@ pub trait Initialize<R: Any + Send + Sync> {
 }
 
 #[async_trait]
-pub trait InitializeAsync<'l, R: Any + Send + Sync> {
-    async fn initialize<T: ServiceHandlerAsync<'l> + ServiceHandler>(&self, handler: &T) -> R;
+pub trait InitializeAsync<R: Any + Send + Sync> {
+    async fn initialize<T: ServiceHandler>(&self, handler: &T) -> R;
 }
 
 #[derive(Clone)]
@@ -302,10 +302,9 @@ impl<'a> ServiceHandlerAsync<'a> for ServiceScope<'a> {
 }
 
 async fn cast_to_any<
-    'l,
     T: Any + Send + Sync,
-    I: InitializeAsync<'l, T> + Send + Sync + 'static,
-    H: ServiceHandlerAsync<'l> + ServiceHandler + Send + Sync,
+    I: InitializeAsync<T> + Send + Sync + 'static,
+    H: ServiceHandler + Send + Sync,
 >(
     handler: &H,
     initializer: I,
@@ -382,7 +381,7 @@ impl<'a> ServiceCollectionBuilder<'a> {
 
     pub fn add_async_service<
         T: Any + Send + Sync,
-        I: InitializeAsync<'a, T> + Clone + Send + Sync + 'static,
+        I: InitializeAsync<T> + Clone + Send + Sync + 'static,
     >(
         mut self,
         type_: ServiceType,
